@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#include "util.h"
+#include "utils.h"
 
 #define DRYDOCK_PORT "2048"
 #define SERVER_PATH "./dry-dock-server"
@@ -21,7 +21,7 @@ static int SOCKFD = -1;
 // forward declare functions
 void initialize_server();
 void destroy_server();
-void create_server();
+void create_container();
 
 /**
  * Arguments:
@@ -85,7 +85,7 @@ int connect_and_verify_server() {
         return -2;
     }
     int vr_len = strlen(VERIFICATION_RESPONSE);
-    char buf[strlen(vr_len)];
+    char buf[vr_len];
     int read;
     if ((read = read_all_from_socket(SOCKFD, buf, vr_len) != vr_len) || strncmp(buf, VERIFICATION_RESPONSE, vr_len) != 0) {
         fprintf(stderr, "Did not receive proper response from server\n");
@@ -110,10 +110,16 @@ void initialize_server() {
     return; // parent can just finish
 }
 
+
 void destroy_server() {
     if (connect_and_verify_server() != 0) {
-        fprintf(stderr, "Cannot desroy server\n");
+        fprintf(stderr, "Cannot destroy server\n");
         exit(1);
     }
     write_all_to_socket(SOCKFD, DESTROY_MESSAGE, strlen(DESTROY_MESSAGE));
+}
+
+
+void create_container() {
+    
 }
