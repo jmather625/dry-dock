@@ -51,5 +51,8 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# Container filesystems
+containers/
+
 # CCLS Cache
 .ccls-cache/
