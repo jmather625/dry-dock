@@ -16,12 +16,21 @@
 #include "container.h"
 #include "util.h"
 
-#define CHILD_STACK_SIZE      (1024 * 1024) // Get scary memory errors if 1024 and 2*1024.
-#define CGROUP_PATH_V1        "/sys/fs/cgroup"
-#define CGROUP_MEMORY_DIR     "/sys/fs/cgroup/memory/dry-dock"
-#define CGROUP_PROCS          "/sys/fs/cgroup/memory/dry-dock/cgroup.procs"
-#define CGROUP_MEMORY_LIMIT   "/sys/fs/cgroup/memory/dry-dock/memory.limit_in_bytes"
-#define CGROUP_SWAP_LIMIT     "/sys/fs/cgroup/memory/dry-dock/memory.memsw.limit_in_bytes"
+#define CHILD_STACK_SIZE              (1024 * 1024) // Get scary memory errors if 1024 and 2*1024.
+#define CGROUP_PATH_V1                "/sys/fs/cgroup"
+#define CGROUP_MEMORY_DIR             "/sys/fs/cgroup/memory/drydock"
+#define CGROUP_MEMORY_PROCS           "/sys/fs/cgroup/memory/drydock/cgroup.procs"
+#define CGROUP_MEMORY_LIMIT           "/sys/fs/cgroup/memory/drydock/memory.limit_in_bytes"
+#define CGROUP_MEM_PLUS_SWAP_LIMIT    "/sys/fs/cgroup/memory/drydock/memory.memsw.limit_in_bytes"
+#define CGROUP_PID_DIR                "/sys/fs/cgroup/pids/drydock/"
+#define CGROUP_PID_PROCS              "/sys/fs/cgroup/pids/drydock/cgroup.procs"
+#define CGROUP_PID_LIMIT              "/sys/fs/cgroup/pids/drydock/pids.max"
+#define CGROUP_CPU_DIR                "/sys/fs/cgroup/cpu/drydock/"
+#define CGROUP_CPU_PROCS              "/sys/fs/cgroup/cpu/drydock/cgroup.procs"
+#define CGROUP_CPU_PERIOD             "/sys/fs/cgroup/cpu/drydock/cpu.cfs_period_us"
+#define CGROUP_CPU_QUOTA              "/sys/fs/cgroup/cpu/drydock/cpu.cfs_quota_us"
+
+static bool* cgroups_done;
 
 void container_print_usage() {
   printf("./container container executable\n");
@@ -42,9 +51,11 @@ void zombie_slayer() {
 int setup_container_process(void* options_ptr) {
   container_params_t* options = (container_params_t*) options_ptr;
 
-  setup_cgroups(options, getpid());
+  // Busy wait until all of that cgroup stuff has been setup from main.
+  puts("Waiting for all cgroups to be setup...");
+  while(!(*cgroups_done)) {}
 
-  if (unshare(CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWUSER)) {
+  if (unshare(CLONE_NEWIPC) == -1) {
     perror("Failed to create new namespaces for container process");
     exit(EXIT_FAILURE);
   }
@@ -94,54 +105,199 @@ int setup_container_process(void* options_ptr) {
 }
 
 
+void setup_memory_cgroup(container_params_t* options, char* container_pid, size_t container_pid_len) {
+  puts("Setting memory limits for container...");
+
+  if (mkdir(CGROUP_MEMORY_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
+    perror("Failed to create CGROUP_MEMORY_DIR");
+    fputs(">>>>>>>> Warning: No memory or swap limits will be set! <<<<<<<<\n", stderr);
+    return;
+  }
+  FILE* f = fopen(CGROUP_MEMORY_LIMIT, "w");
+  if (f) {
+    size_t num_bytes = strlen(options->mem_limit);
+    if (fwrite(options->mem_limit, sizeof(char), num_bytes, f) != num_bytes) {
+      perror("Failed to write memory limit to CGROUP_MEMORY_LIMIT");
+      fputs(">>>>>>>> Warning: Memory limit not set! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_MEMORY_LIMIT");
+    }
+  }
+  else {
+    perror("Failed to open CGROUP_MEMORY_LIMIT");
+    perror("Failed to write memory limit to CGROUP_MEMORY_LIMIT");
+    fputs(">>>>>>>> Warning: Memory limit not set! <<<<<<<<\n", stderr);
+  }
+
+  f = fopen(CGROUP_MEM_PLUS_SWAP_LIMIT, "w");
+  if (f) {
+    size_t num_bytes = strlen(options->mem_plus_swap_limit);
+    if (fwrite(options->mem_plus_swap_limit, sizeof(char), num_bytes, f) != num_bytes) {
+      perror("Failed to write memory plus swap limit to CGROUP_MEM_PLUS_SWAP_LIMIT");
+      fputs(">>>>>>>> Warning: Memory plus swap limit not set! <<<<<<<<\n", stderr);
+      fputs(">>>>>>>> Note: If container exceeds memory limit, it will use swap instead of killing processes! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_MEM_PLUS_SWAP_LIMIT");
+    }
+  }
+  else {
+    perror("Failed to open CGROUP_MEM_PLUS_SWAP_LIMIT");
+    fputs(">>>>>>>> Warning: Memory plus swap limit not set! <<<<<<<<\n", stderr);
+    fputs(">>>>>>>> Note: If container exceeds memory limit, it will use swap instead of killing processes! <<<<<<<<\n", stderr);
+  }
+
+  f = fopen(CGROUP_MEMORY_PROCS, "w");
+  if (f) {;
+    if (fwrite(container_pid, sizeof(char), container_pid_len, f) != container_pid_len) {
+      perror("Failed to write container PID to CGROUP_MEMORY_PROCS");
+      fputs(">>>>>>>> Warning: No memory or swap limits will be set! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_MEMORY_PROCS");
+    }
+  }
+  else {
+    perror("Failed to write container PID to CGROUP_MEMORY_PROCS");
+    fputs(">>>>>>>> Warning: No memory or swap limits will be set! <<<<<<<<\n", stderr);
+  }
+}
+
+
+void setup_pid_cgroup(container_params_t* options, char* container_pid, size_t container_pid_len) {
+  puts("Setting number of processes limit for container...");
+
+  if (mkdir(CGROUP_PID_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
+    perror("Failed to create CGROUP_PID_DIR");
+    fputs(">>>>>>>> Warning: No PID limits will be set! <<<<<<<<\n", stderr);
+    return;
+  }
+  FILE* f = fopen(CGROUP_PID_LIMIT, "w");
+  if (f) {
+    size_t num_bytes = strlen(options->pid_limit);
+    if (fwrite(options->pid_limit, sizeof(char), num_bytes, f) != num_bytes) {
+      perror("Failed to write PID limit to CGROUP_PID_LIMIT");
+      fputs(">>>>>>>> Warning: PID limit not set! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_PID_LIMIT");
+    }
+  }
+  else {
+    perror("Failed to open CGROUP_PID_LIMIT");
+    fputs(">>>>>>>> Warning: PID limit not set! <<<<<<<<\n", stderr);
+  }
+
+  f = fopen(CGROUP_PID_PROCS, "w");
+  if (f) {;
+    if (fwrite(container_pid, sizeof(char), container_pid_len, f) != container_pid_len) {
+      perror("Failed to write container PID to CGROUP_PID_PROCS");
+      fputs(">>>>>>>> Warning: No PID limits will be set! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_PID_PROCS");
+    }
+  }
+  else {
+    perror("Failed to write container PID to CGROUP_PID_PROCS");
+    fputs(">>>>>>>> Warning: No PID limits will be set! <<<<<<<<\n", stderr);
+  }
+}
+
+
+void setup_cpu_cgroup(container_params_t* options, char* container_pid, size_t container_pid_len) {
+  puts("Setting CPU limits for container...");
+
+  if (mkdir(CGROUP_CPU_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
+    perror("Failed to create CGROUP_CPU_DIR");
+    fputs(">>>>>>>> Warning: No CPU limits will be set! <<<<<<<<\n", stderr);
+    return;
+  }
+  FILE* f = fopen(CGROUP_CPU_PERIOD, "w");
+  if (f) {
+    size_t num_bytes = strlen(options->cpu_period);
+    if (fwrite(options->cpu_period, sizeof(char), num_bytes, f) != num_bytes) {
+      perror("Failed to write CPU period to CGROUP_CPU_PERIOD");
+      fputs(">>>>>>>> Warning: CPU limit may be set to something very strange! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_CPU_PERIOD");
+    }
+  }
+  else {
+    perror("Failed to open CGROUP_CPU_PERIOD");
+    fputs(">>>>>>>> Warning: CPU may be set to something very strange! <<<<<<<<\n", stderr);
+  }
+
+  f = fopen(CGROUP_CPU_QUOTA, "w");
+  if (f) {
+    size_t num_bytes = strlen(options->cpu_quota);
+    if (fwrite(options->cpu_quota, sizeof(char), num_bytes, f) != num_bytes) {
+      perror("Failed to write CPU quota to CGROUP_CPU_PERIOD");
+      fputs(">>>>>>>> Warning: CPU limit may be set to something very strange! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_CPU_QUOTA");
+    }
+  }
+  else {
+    perror("Failed to open CGROUP_CPU_QUOTA");
+    fputs(">>>>>>>> Warning: CPU may be set to something very strange! <<<<<<<<\n", stderr);
+  }
+
+  f = fopen(CGROUP_CPU_PROCS, "w");
+  if (f) {;
+    if (fwrite(container_pid, sizeof(char), container_pid_len, f) != container_pid_len) {
+      perror("Failed to write container PID to CGROUP_PID_PROCS");
+      fputs(">>>>>>>> Warning: No PID limits will be set! <<<<<<<<\n", stderr);
+    }
+    if (fclose(f) != 0) {
+      perror("Failed to close CGROUP_PID_PROCS");
+    }
+  }
+  else {
+    perror("Failed to write container PID to CGROUP_CPU_PROCS");
+    fputs(">>>>>>>> Warning: No CPU limits will be set! <<<<<<<<\n", stderr);
+  }
+}
+
+
 void setup_cgroups(container_params_t* options, pid_t container_pid) {
-  //mount -t cgroup -o all cgroup /sys/fs/cgroup
-  puts("Mounting /sys/fs/cgroup...");
-  // Try to mount cgroup and fail if this fails for a reason other than it already being mounted.
+  puts("Setting up cgroups for resource limits...");
+
+  // //mount -t cgroup -o all cgroup /sys/fs/cgroup
+  puts("Mounting /sys/fs/cgroup if necessary...");
   if (mount("cgroup", CGROUP_PATH_V1, "cgroup", 0, "") != 0 && errno != EBUSY) {
     perror("Mounting /sys/fs/cgroup failed");
     fputs(">>>>>>>> Warning: No resource limits will be set! <<<<<<<<\n", stderr);
     return;
   }
 
-  // Modify memory and swap limits.
-  // First create cgroup directory.
-  if (mkdir(CGROUP_MEMORY_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0 && errno != EEXIST) {
-    perror("Unable to create new cgroup directory");
-    fputs(">>>>>>>> Warning: No memory resource limits will be set! <<<<<<<<\n", stderr);
-  }
+  // Use snprintf to find the number of bytes we need to store the PID as a string.
+  // Note: snprintf does not count the NULL byte in its return value.
+  size_t container_pid_str_len = snprintf(NULL, 0, "%u", container_pid);
+  char container_pid_str[++container_pid_str_len]; // Need to increment container_pid_len by 1.
+  snprintf(container_pid_str, container_pid_str_len, "%u", container_pid);
 
-  // Open this file and write the new limit to it.
-  int memory_limit_fd = open_fd_interrupt_proof(CGROUP_MEMORY_LIMIT, O_WRONLY | O_TRUNC);
-  if (memory_limit_fd < 0) {
-    perror("Failed to set memory usage limit");
-  }
-  else {
-    if (write_all_to_fd(memory_limit_fd, options->mem_limit, strlen(options->mem_limit)) == -1) {
-      perror("Failed to set memory usage limit");
-    }
-    if (close_fd_interrupt_proof(memory_limit_fd) == -1) {
-      perror("Failed to close memory limit file");
-    }
-  }
+  setup_memory_cgroup(options, container_pid_str, container_pid_str_len);
+  setup_pid_cgroup(options, container_pid_str, container_pid_str_len);
+  setup_cpu_cgroup(options, container_pid_str, container_pid_str_len);
 
-  // Determine the number of bytes we need to write the PID as a string.
-  char tmp[1];
-  size_t pid_length = snprintf(tmp, 1, "%u", container_pid);
-  char pid_str[pid_length];
-  sprintf(pid_str, "%u", container_pid);
+  return;
+}
 
-  int cgroup_procs_fd = open_fd_interrupt_proof(CGROUP_PROCS, O_WRONLY | O_TRUNC);
-  if (cgroup_procs_fd < 0) {
-    perror("Failed to set all memory limits");
+
+void clean_up_cgroups() {
+  puts("Cleaning up cgroups...");
+  if (rmdir("/sys/fs/cgroup/memory/drydock") != 0) {
+    perror("Deleting memory cgroup failed");
   }
-  else {
-    if (write_all_to_fd(cgroup_procs_fd, pid_str, pid_length) == -1) {
-      perror("Failed to set all memory limits");
-    }
-    if (close_fd_interrupt_proof(memory_limit_fd) == -1) {
-      perror("Failed to set all memory limits");
-    }
+  if (rmdir("/sys/fs/cgroup/pids/drydock") != 0) {
+    perror("Deleting pid cgroup failed");
+  }
+  if (rmdir("/sys/fs/cgroup/cpu/drydock") != 0) {
+    perror("Deleting cpu cgroup failed");
   }
 }
 
@@ -152,17 +308,21 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  // TODO Parse these from command line.
+  // TODO: CPU period should probably be held fixed with the CPU quota computed as a fraction of it.
   container_params_t options = {
     .container_root_path = argv[1],
     .exec_command = &argv[2],
-    .mem_limit = "500",
-    .swap_limit = "0",
-    .cpu_limit = "0.4"
+    .mem_limit = "41943040",
+    .mem_plus_swap_limit = "41943040",
+    .pid_limit = "10",
+    .cpu_period = "1000000",
+    .cpu_quota = "200000"
   };
 
   // Determines what new namespaces we will create for our containerized process.
-  // int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWUSER;
-  int namespaces = CLONE_NEWPID;
+  // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
+  int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWUSER;
   int clone_flags = SIGCHLD;
 
   // Got this from man page.
@@ -172,12 +332,18 @@ int main(int argc, char** argv) {
     perror("Mmap failed to allocate memory for stack");
   }
 
+  cgroups_done = mmap(0, sizeof(bool), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
   char* child_stack_ptr = child_stack + CHILD_STACK_SIZE; // Stack grows down.
   pid_t child_pid = clone(setup_container_process, child_stack_ptr, clone_flags | namespaces, &options);
   if (child_pid == -1) {
     perror("Cloning process to create container failed");
     return EXIT_FAILURE;
   }
+
+  setup_cgroups(&options, child_pid);
+
+  *cgroups_done = true;
 
   int status;
   if (waitpid((pid_t) -1, &status, 0) == -1) {
@@ -188,9 +354,12 @@ int main(int argc, char** argv) {
     perror("Failed to free mmapped stack");
   }
 
-  if (rmdir(CGROUP_MEMORY_DIR) != 0) {
-    perror("Deleting cgroup failed");
+  if (munmap(cgroups_done, sizeof(bool)) == -1) {
+    perror("Failed to free mmapped flag");
   }
+
+  // Need to delete cgroups here because the container no longer has access.
+  clean_up_cgroups();
 
   return EXIT_SUCCESS;
 }
