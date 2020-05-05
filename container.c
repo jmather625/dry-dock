@@ -8,8 +8,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sched.h>
-#include <string.h>
+#include <sched.h> #include <string.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 
@@ -33,7 +32,7 @@
 static bool* cgroups_done;
 
 void container_print_usage() {
-  printf("./container container executable\n");
+  printf("./container container executable [-m memory_limit] [-p pid_limit] [-c cpu_limit] [-q cpu_quota]\n");
 }
 
 void zombie_slayer() {
@@ -77,6 +76,18 @@ int setup_container_process(void* options_ptr) {
     perror("Mounting /proc failed");
     exit(EXIT_FAILURE);
   }
+
+	puts("Mounting /dev...");
+	if(mount("dev", "/dev", "dev", 0, "") != 0){
+		perror("Mounting /dev failed");
+		exit(EXIT_FAILURE);
+	}
+
+	puts("Mounting /sys...");
+	if(mount("sys", "/sys", "sys", 0, "") != 0){
+		perror("Mounting  /sys failed");
+		exit(EXIT_FAILURE);
+	}
 
   // We are now PID 1 of our namespace, so time to act like init and clean up after anything that gets orphaned.
   // To do this, we are going to fork and have the user's program run in a new process in our new namespaces.
@@ -319,6 +330,23 @@ int main(int argc, char** argv) {
     .cpu_period = "1000000",
     .cpu_quota = "200000"
   };
+
+  int opt = 0;
+  while((opt=getopt(argc,argv,"m:p:c:q:")) != -1){
+  	if(opt=='m'){
+		options.mem_limit = argv[optind-1];
+		options.mem_plus_swap_limit = argv[optind-1];
+	}else if(opt=='p'){
+		options.pid_limit = argv[optind-1];
+	}else if(opt=='c'){
+		options.cpu_period = argv[optind-1];
+	}else if(opt=='q'){
+		options.cpu_quota = argv[optind-1];
+	}else {
+		container_print_usage();
+		return EXIT_FAILURE;
+	}
+   }
 
   // Determines what new namespaces we will create for our containerized process.
   // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
