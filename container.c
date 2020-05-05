@@ -8,7 +8,8 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sched.h> #include <string.h>
+#include <sched.h> 
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 
@@ -77,6 +78,7 @@ int setup_container_process(void* options_ptr) {
     exit(EXIT_FAILURE);
   }
 
+/*
 	puts("Mounting /dev...");
 	if(mount("dev", "/dev", "dev", 0, "") != 0){
 		perror("Mounting /dev failed");
@@ -88,6 +90,7 @@ int setup_container_process(void* options_ptr) {
 		perror("Mounting  /sys failed");
 		exit(EXIT_FAILURE);
 	}
+*/
 
   // We are now PID 1 of our namespace, so time to act like init and clean up after anything that gets orphaned.
   // To do this, we are going to fork and have the user's program run in a new process in our new namespaces.
