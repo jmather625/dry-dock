@@ -18,17 +18,26 @@
 
 #define CHILD_STACK_SIZE              (1024 * 1024) // Get scary memory errors if 1024 and 2*1024.
 #define CGROUP_PATH_V1                "/sys/fs/cgroup"
+
+// memory namespace
 #define CGROUP_MEMORY_DIR             "/sys/fs/cgroup/memory/drydock"
 #define CGROUP_MEMORY_PROCS           "/sys/fs/cgroup/memory/drydock/cgroup.procs"
 #define CGROUP_MEMORY_LIMIT           "/sys/fs/cgroup/memory/drydock/memory.limit_in_bytes"
 #define CGROUP_MEM_PLUS_SWAP_LIMIT    "/sys/fs/cgroup/memory/drydock/memory.memsw.limit_in_bytes"
+
+// pid namespace
 #define CGROUP_PID_DIR                "/sys/fs/cgroup/pids/drydock/"
 #define CGROUP_PID_PROCS              "/sys/fs/cgroup/pids/drydock/cgroup.procs"
 #define CGROUP_PID_LIMIT              "/sys/fs/cgroup/pids/drydock/pids.max"
+
+// cpu namespace
 #define CGROUP_CPU_DIR                "/sys/fs/cgroup/cpu/drydock/"
 #define CGROUP_CPU_PROCS              "/sys/fs/cgroup/cpu/drydock/cgroup.procs"
 #define CGROUP_CPU_PERIOD             "/sys/fs/cgroup/cpu/drydock/cpu.cfs_period_us"
 #define CGROUP_CPU_QUOTA              "/sys/fs/cgroup/cpu/drydock/cpu.cfs_quota_us"
+
+// network namespace to join
+#define NETWORK_NAMESPACE             "/var/run/netns/netns0"
 
 static bool* cgroups_done;
 
@@ -60,7 +69,19 @@ int setup_container_process(void* options_ptr) {
     exit(EXIT_FAILURE);
   }
 
+  puts("Joining a network namespace...");
+  int fd = open(NETWORK_NAMESPACE, O_RDONLY, 0);
+  if (fd < 0) {
+    perror("Failed to open namespace path");
+    exit(EXIT_FAILURE);
+  }
+  if (setns(fd, 0)) {
+    perror("Failed to set the network namespace");
+  }
+  close(fd);
+
   // Need to change to the new root directory before chroot or it is very easy to potentially escape.
+  printf("chdir-ing to %s\n", options->container_root_path);
   if (chdir(options->container_root_path) == -1) {
     perror("Failed to navigate to container path");
     exit(EXIT_FAILURE);
@@ -87,7 +108,7 @@ int setup_container_process(void* options_ptr) {
   }
   // Child.
   if (child_pid == 0) {
-    fprintf(stderr, "Going to exec in container\n");
+    fprintf(stderr, "Going to exec in container this command: %s\n", options->exec_command[0]);
     execvp(options->exec_command[0], options->exec_command);
     perror("Exec in container failed");
     exit(EXIT_FAILURE); // Only get here if something went wrong.
@@ -262,17 +283,21 @@ void setup_cpu_cgroup(container_params_t* options, char* container_pid, size_t c
   }
 }
 
+void setup_network_cgroup(container_params_t* options, char* container_pid, size_t container_pid_len) {
+  
+}
+
 
 void setup_cgroups(container_params_t* options, pid_t container_pid) {
   puts("Setting up cgroups for resource limits...");
 
   // //mount -t cgroup -o all cgroup /sys/fs/cgroup
-  puts("Mounting /sys/fs/cgroup if necessary...");
-  if (mount("cgroup", CGROUP_PATH_V1, "cgroup", 0, "") != 0 && errno != EBUSY) {
-    perror("Mounting /sys/fs/cgroup failed");
-    fputs(">>>>>>>> Warning: No resource limits will be set! <<<<<<<<\n", stderr);
-    return;
-  }
+  // puts("Mounting /sys/fs/cgroup if necessary...");
+  // if (mount("cgroup", CGROUP_PATH_V1, "cgroup", 0, "") != 0 && errno != EBUSY) {
+  //   perror("Mounting /sys/fs/cgroup failed");
+  //   fputs(">>>>>>>> Warning: No resource limits will be set! <<<<<<<<\n", stderr);
+  //   return;
+  // }
 
   // Use snprintf to find the number of bytes we need to store the PID as a string.
   // Note: snprintf does not count the NULL byte in its return value.
@@ -283,6 +308,7 @@ void setup_cgroups(container_params_t* options, pid_t container_pid) {
   setup_memory_cgroup(options, container_pid_str, container_pid_str_len);
   setup_pid_cgroup(options, container_pid_str, container_pid_str_len);
   setup_cpu_cgroup(options, container_pid_str, container_pid_str_len);
+  setup_network_cgroup(options, container_pid_str, container_pid_str_len);
 
   return;
 }
@@ -322,7 +348,9 @@ int main(int argc, char** argv) {
 
   // Determines what new namespaces we will create for our containerized process.
   // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
-  int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWUSER;
+
+  // int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWUSER;
+  int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS;
   int clone_flags = SIGCHLD;
 
   // Got this from man page.

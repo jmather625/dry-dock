@@ -1,0 +1,5 @@
+# can be for adding of creating
+container: # new name for new container, or existing container
+os:
+tarball_path: # path to tarballed archive of all binaries
+namespaces: 
