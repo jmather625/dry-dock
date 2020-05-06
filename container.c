@@ -42,7 +42,7 @@
 static bool* cgroups_done;
 
 void container_print_usage() {
-  printf("./container container executable\n");
+  printf("./container [config_file] container executable\n");
 }
 
 void zombie_slayer() {
@@ -334,17 +334,19 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  // TODO Parse these from command line.
   // TODO: CPU period should probably be held fixed with the CPU quota computed as a fraction of it.
   container_params_t options = {
-    .container_root_path = argv[1],
-    .exec_command = &argv[2],
+    .container_root_path = argv[],
+    .exec_command = &argv[3],
     .mem_limit = "41943040",
     .mem_plus_swap_limit = "41943040",
     .pid_limit = "10",
     .cpu_period = "1000000",
     .cpu_quota = "200000"
   };
+
+  int config = open(argv[1], O_RDONLY);
+  if(config 
 
   // Determines what new namespaces we will create for our containerized process.
   // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
