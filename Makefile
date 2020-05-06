@@ -13,3 +13,11 @@ network-setup:
 
 network-teardown:
 	sudo bash networking/teardown.sh
+
+test: fork_test mem_test
+
+fork_test: fork_test.c
+	clang $^ -o fork_test
+
+mem_test: mem_test.c
+	clang $^ -o mem_test
