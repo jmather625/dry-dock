@@ -14,7 +14,6 @@
 #include <sys/mount.h>
 
 #include "container.h"
-#include "util.h"
 
 #define CHILD_STACK_SIZE              (1024 * 1024) // Get scary memory errors if 1024 and 2*1024.
 #define CGROUP_PATH_V1                "/sys/fs/cgroup"
@@ -284,7 +283,7 @@ void setup_cpu_cgroup(container_params_t* options, char* container_pid, size_t c
 }
 
 void setup_network_cgroup(container_params_t* options, char* container_pid, size_t container_pid_len) {
-  
+
 }
 
 
