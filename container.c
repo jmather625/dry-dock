@@ -330,6 +330,7 @@ int main(int argc, char** argv) {
     .cpu_quota = "200000"
   };
 
+/*
   int opt = 0;
   while((opt=getopt(argc,argv,"m:p:c:q:")) != -1){
   	if(opt=='m'){
@@ -346,6 +347,7 @@ int main(int argc, char** argv) {
 		return EXIT_FAILURE;
 	}
    }
+*/
 
   // Determines what new namespaces we will create for our containerized process.
   // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
