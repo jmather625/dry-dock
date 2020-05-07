@@ -26,6 +26,8 @@ Uses cgroups to:
 
 ### Miscellaneous
 - This container has an excellent user experience
+  - Informative errors
+  - Specify resource limits from a simple configuration file
 - Can save/load container images for different Linux distributions (you path inside the container might be messed up though)
 
 ## Instructions
@@ -34,20 +36,25 @@ You can create a container by pretty much copying all of the non-kernel files of
 Before running the container, make sure the virtual network interface pair and forwarding for networking is all setup with `make network-setup`. You can undo these changes with `make network-teardown`. If you want the container to be able to contact the internet, make sure to change `eth0` in `networking/setup.sh` to whatever your internet connected interface is (ex: on my laptop this is `wlp3s0`).
 
 To run an executable in our container, just run `make container` and then `sudo ./container [config_file] container_dir executable`.
-Note that the config_file arg is optional and can be anyname.
-The config file should be in this format where each line is optional:
-(see .config_file for an example)
-''''''''''''''''''''''''''''
-Sample Config File
-mem_limit: 123445
-mem_plus_swap_limit: 13403984
+Note that the config_file arg is optional and can be any name.
+The config file should be in this format where each line is optional (see sample_config.conf for an example):
+
+```
+mem_limit: 41943040
+mem_plus_swap_limit: 41943040
 CPU%: 23
 pid_limit: 13
+```
 
-END OF CONFIG FILE
-''''''''''''''''''''''''''''
+If no configuration file is specified, the container will default to the following settings:
+```
+mem_limit: 41943040
+mem_plus_swap_limit: 41943040
+CPU%: 20
+pid_limit: 10
+```
 
-To run an executable in our container without having to be root, just run `make non-root-container` and then `sudo ./non-root-container container_dir executable`.
+To run an executable in our container without having to be root, just run `make non-root-container` and then `sudo ./non-root-container [config_file] container_dir executable`.
 
 ## Small Tests
 You can test networking by starting up a container that executes `/bin/bash` and have it ping an IP address like `8.8.8.8`. Note, right now there are issue with domain name resolution, so if you get an error there try out an IP address.

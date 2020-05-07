@@ -351,15 +351,18 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
     char buff[1000];
-    if(read(config, buff, 1000) == 0){
+    ssize_t bytes_read = read(config, buff, 1000);
+    if(bytes_read == 0 || bytes_read == -1){
       perror("Cannot read config_file");
       return EXIT_FAILURE;
     }
 
-	printf("Opening and reading config file...\n");
+    buff[bytes_read] = '\0';
+
+    printf("Opening and reading config file...\n");
     char* pointer = NULL;
     if((pointer = strstr(buff, "mem_limit:")) != NULL){
-      printf("Chaning mem_limit to:%s", pointer+12);
+      printf("Changing mem_limit to:%s", pointer+12);
       options.mem_limit = pointer+12;
     }
     if((pointer = strstr(buff, "mem_plus_swap_limit:")) != NULL){
@@ -372,60 +375,61 @@ int main(int argc, char** argv) {
     }
     if((pointer = strstr(buff, "CPU%:")) != NULL){
       printf("Changing CPU: %s\n", pointer+5);
-	  int new_quota = atoi(pointer+5)*10000;
-	  if(new_quota < 0){
-	  	printf("Cannot change CPU usage to negative amount...and why would you?\n");
-		return EXIT_FAILURE;}
-	  if(new_quota > 1000000){
-	  	printf("Cannot change CPU usage over 100%%...nice try thought\n");
-		return EXIT_FAILURE;}
-	  char quota = (char) new_quota;
-	  options.cpu_quota = &quota;
+      int new_quota = atoi(pointer+5)*10000;
+      if(new_quota < 0){
+        printf("Cannot change CPU usage to negative amount...and why would you?\n");
+        return EXIT_FAILURE;}
+        if(new_quota > 1000000){
+          printf("Cannot change CPU usage over 100%%...nice try though\n");
+          return EXIT_FAILURE;
+        }
+        char quota = (char) new_quota;
+        options.cpu_quota = &quota;
+      }
+
     }
+    // Determines what new namespaces we will create for our containerized process.
+    // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
 
-  }
-  // Determines what new namespaces we will create for our containerized process.
-  // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
+    // int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWUSER;
+    int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS;
+    int clone_flags = SIGCHLD;
 
-  // int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWUSER;
-  int namespaces = CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS;
-  int clone_flags = SIGCHLD;
+    // Got this from man page.
+    char* child_stack = mmap(NULL, CHILD_STACK_SIZE, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+      if (child_stack == MAP_FAILED) {
+        perror("Mmap failed to allocate memory for stack");
+      }
 
-  // Got this from man page.
-  char* child_stack = mmap(NULL, CHILD_STACK_SIZE, PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-  if (child_stack == MAP_FAILED) {
-    perror("Mmap failed to allocate memory for stack");
-  }
+      cgroups_done = mmap(0, sizeof(bool), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
-  cgroups_done = mmap(0, sizeof(bool), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+      char* child_stack_ptr = child_stack + CHILD_STACK_SIZE; // Stack grows down.
+      pid_t child_pid = clone(setup_container_process, child_stack_ptr, clone_flags | namespaces, &options);
+      if (child_pid == -1) {
+        perror("Cloning process to create container failed");
+        return EXIT_FAILURE;
+      }
 
-  char* child_stack_ptr = child_stack + CHILD_STACK_SIZE; // Stack grows down.
-  pid_t child_pid = clone(setup_container_process, child_stack_ptr, clone_flags | namespaces, &options);
-  if (child_pid == -1) {
-    perror("Cloning process to create container failed");
-    return EXIT_FAILURE;
-  }
+      setup_cgroups(&options, child_pid);
 
-  setup_cgroups(&options, child_pid);
+      *cgroups_done = true;
 
-  *cgroups_done = true;
+      int status;
+      if (waitpid((pid_t) -1, &status, 0) == -1) {
+        perror("Waitpid for container failed");
+      }
 
-  int status;
-  if (waitpid((pid_t) -1, &status, 0) == -1) {
-    perror("Waitpid for container failed");
-  }
+      if (munmap(child_stack, CHILD_STACK_SIZE) == -1) {
+        perror("Failed to free mmapped stack");
+      }
 
-  if (munmap(child_stack, CHILD_STACK_SIZE) == -1) {
-    perror("Failed to free mmapped stack");
-  }
+      if (munmap(cgroups_done, sizeof(bool)) == -1) {
+        perror("Failed to free mmapped flag");
+      }
 
-  if (munmap(cgroups_done, sizeof(bool)) == -1) {
-    perror("Failed to free mmapped flag");
-  }
+      // Need to delete cgroups here because the container no longer has access.
+      clean_up_cgroups();
 
-  // Need to delete cgroups here because the container no longer has access.
-  clean_up_cgroups();
-
-  return EXIT_SUCCESS;
-}
+      return EXIT_SUCCESS;
+    }
