@@ -1,0 +1,14 @@
+[Unit]
+Description=System Security Services Daemon
+# SSSD must be running before we permit user sessions
+Before=systemd-user-sessions.service nss-user-lookup.target autofs.service
+Wants=nss-user-lookup.target
+
+[Service]
+ExecStart=/usr/sbin/sssd -i -f
+Type=notify
+NotifyAccess=main
+PIDFile=/var/run/sssd.pid
+
+[Install]
+WantedBy=multi-user.target

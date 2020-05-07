@@ -1,0 +1,6 @@
+this is a sample config file
+
+mem_limit: 1233444
+
+pid_limit: 12
+CPU%: 12

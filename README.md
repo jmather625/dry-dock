@@ -36,6 +36,7 @@ Before running the container, make sure the virtual network interface pair and f
 To run an executable in our container, just run `make container` and then `sudo ./container [config_file] container_dir executable`.
 Note that the config_file arg is optional and can be anyname.
 The config file should be in this format where each line is optional:
+(see .config_file for an example)
 ''''''''''''''''''''''''''''
 Sample Config File
 mem_limit: 123445

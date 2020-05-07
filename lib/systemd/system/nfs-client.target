@@ -1,0 +1,15 @@
+[Unit]
+Description=NFS client services
+Before=remote-fs-pre.target
+Wants=remote-fs-pre.target
+
+Wants=nfs-blkmap.service
+After=nfs-blkmap.service
+
+# GSS services dependencies and ordering
+Wants=rpc-gssd.service
+After=rpc-gssd.service
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=remote-fs.target
