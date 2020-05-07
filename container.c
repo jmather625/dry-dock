@@ -391,8 +391,8 @@ int main(int argc, char** argv) {
           printf("Cannot change CPU usage over 100%%...nice try though\n");
           return EXIT_FAILURE;
         }
-        token = strtok(NULL, "\n");
 	  }
+       token = strtok(NULL, "\n");
       }
     }
     // Determines what new namespaces we will create for our containerized process.
