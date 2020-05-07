@@ -335,8 +335,8 @@ int main(int argc, char** argv) {
 
   // TODO: CPU period should probably be held fixed with the CPU quota computed as a fraction of it.
   container_params_t options = {
-    .container_root_path = argv[],
-    .exec_command = &argv[3],
+    .container_root_path = argv[argc-2],
+    .exec_command = &argv[argc-1],
     .mem_limit = "41943040",
     .mem_plus_swap_limit = "41943040",
     .pid_limit = "10",
@@ -344,9 +344,37 @@ int main(int argc, char** argv) {
     .cpu_quota = "200000"
   };
 
-  int config = open(argv[1], O_RDONLY);
-  if(config 
+  if(argc==4){}
+    int config = open(argv[1], O_RDONLY);
+    if(config == -1){
+      perror("Cannot open config_file");
+      return EXIT_FAILURE;
+    }
+    char buff[1000];
+    if(read(config, buff, 1000) == 0){
+      perror("Cannot read config_file");
+      return EXIT_FAILURE;
+    }
 
+    char* pointer = NULL;
+    if((pointer = strstr(buff, "mem_limit:")) != NULL){
+      printf("Chaning mem_limit to: %s\n", pointer+12);
+      options.mem_limit = atoi(pointer);
+    }
+    if((pointer = strstr(buff, "mem_plus_swap_limit:")) != NULL){
+      printf("Changing mem_plus_swap_limit to: %s\n", pointer+21);
+      options.mem_plus_swap_limit = atoi(pointer);
+    }
+    if((pointer = strstr(buff, "pid_limit:")) != NULL){
+      printf("Changing pid_limit to: %s\n", pointer+11);
+      options.pid_limit = atoi(pointer);
+    }
+    if((pointer = strstr(buff, "CPU%:")) != NULL){
+      printf("Changing CPU%: %s\n", pointer+5);
+
+    }
+
+  }
   // Determines what new namespaces we will create for our containerized process.
   // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
 
