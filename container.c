@@ -344,7 +344,9 @@ int main(int argc, char** argv) {
     .cpu_quota = "200000"
   };
 
-  if(argc==4){
+  if(argc==3){
+  	printf("No config file specified, using default cgroup values\n");
+  }else{
     int config = open(argv[1], O_RDONLY);
     if(config == -1){
       perror("Cannot open config_file");
