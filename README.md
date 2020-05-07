@@ -33,7 +33,18 @@ You can create a container by pretty much copying all of the non-kernel files of
 
 Before running the container, make sure the virtual network interface pair and forwarding for networking is all setup with `make network-setup`. You can undo these changes with `make network-teardown`. If you want the container to be able to contact the internet, make sure to change `eth0` in `networking/setup.sh` to whatever your internet connected interface is (ex: on my laptop this is `wlp3s0`).
 
-To run an executable in our container, just run `make container` and then `sudo ./container container_dir executable`.
+To run an executable in our container, just run `make container` and then `sudo ./container [config_file] container_dir executable`.
+Note that the config_file arg is optional and can be anyname.
+The config file should be in this format where each line is optional:
+''''''''''''''''''''''''''''
+Sample Config File
+mem_limit: 123445
+mem_plus_swap_limit: 13403984
+CPU%: 23
+pid_limit: 13
+
+END OF CONFIG FILE
+''''''''''''''''''''''''''''
 
 To run an executable in our container without having to be root, just run `make non-root-container` and then `sudo ./non-root-container container_dir executable`.
 

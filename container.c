@@ -344,7 +344,7 @@ int main(int argc, char** argv) {
     .cpu_quota = "200000"
   };
 
-  if(argc==4){}
+  if(argc==4){
     int config = open(argv[1], O_RDONLY);
     if(config == -1){
       perror("Cannot open config_file");
@@ -356,22 +356,31 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
 
+	printf("Opening and reading config file...\n");
     char* pointer = NULL;
     if((pointer = strstr(buff, "mem_limit:")) != NULL){
-      printf("Chaning mem_limit to: %s\n", pointer+12);
-      options.mem_limit = atoi(pointer);
+      printf("Chaning mem_limit to:%s", pointer+12);
+      options.mem_limit = pointer+12;
     }
     if((pointer = strstr(buff, "mem_plus_swap_limit:")) != NULL){
-      printf("Changing mem_plus_swap_limit to: %s\n", pointer+21);
-      options.mem_plus_swap_limit = atoi(pointer);
+      printf("Changing mem_plus_swap_limit to:%s", pointer+21);
+      options.mem_plus_swap_limit = pointer+21;
     }
     if((pointer = strstr(buff, "pid_limit:")) != NULL){
-      printf("Changing pid_limit to: %s\n", pointer+11);
-      options.pid_limit = atoi(pointer);
+      printf("Changing pid_limit to:%s", pointer+11);
+      options.pid_limit = pointer+11;
     }
     if((pointer = strstr(buff, "CPU%:")) != NULL){
-      printf("Changing CPU%: %s\n", pointer+5);
-
+      printf("Changing CPU: %s\n", pointer+5);
+	  int new_quota = atoi(pointer+5)*10000;
+	  if(new_quota < 0){
+	  	printf("Cannot change CPU usage to negative amount...and why would you?\n");
+		return EXIT_FAILURE;}
+	  if(new_quota > 1000000){
+	  	printf("Cannot change CPU usage over 100%%...nice try thought\n");
+		return EXIT_FAILURE;}
+	  char quota = (char) new_quota;
+	  options.cpu_quota = &quota;
     }
 
   }
