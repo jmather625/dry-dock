@@ -392,6 +392,7 @@ int main(int argc, char** argv) {
           return EXIT_FAILURE;
         }
         token = strtok(NULL, "\n");
+	  }
       }
     }
     // Determines what new namespaces we will create for our containerized process.
