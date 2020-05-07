@@ -361,38 +361,38 @@ int main(int argc, char** argv) {
 
     printf("Opening and reading config file...\n");
     char* pointer = NULL;
-	char* token = NULL;
-	token = strtok(buff, "\n");
-	while(token != NULL){
-    if((pointer = strstr(token, "mem_limit:")) != NULL){
-      printf("Changing mem_limit to:%s\n", pointer+11);
-      options.mem_limit = pointer+11;
-    }
-    if((pointer = strstr(token, "mem_plus_swap_limit:")) != NULL){
-      printf("Changing mem_plus_swap_limit to:%s\n", pointer+21);
-      options.mem_plus_swap_limit = pointer+21;
-    }
-    if((pointer = strstr(token, "pid_limit:")) != NULL){
-      printf("Changing pid_limit to:%s\n", pointer+11);
-      options.pid_limit = pointer+11;
-    }
-    if((pointer = strstr(token, "CPU%:")) != NULL){
-      printf("Changing CPU%%:%s\n", pointer+6);
-      int new_quota = atoi(pointer+6)*10000;
-      if(new_quota < 0){
-        printf("Cannot change CPU usage to negative amount...and why would you?\n");
-        return EXIT_FAILURE;}
-        if(new_quota > 1000000){
-          printf("Cannot change CPU usage over 100%%...nice try though\n");
-          return EXIT_FAILURE;
-        }
-		char quota[10];
-		sprintf(quota, "%d", new_quota);
-
-        options.cpu_quota = quota;
+    char* token = NULL;
+    token = strtok(buff, "\n");
+    while(token != NULL){
+      if((pointer = strstr(token, "mem_limit:")) != NULL){
+        printf("Changing mem_limit to: %s\n", pointer+11);
+        options.mem_limit = pointer+11;
       }
-	token = strtok(NULL, "\n");
-	}
+      if((pointer = strstr(token, "mem_plus_swap_limit:")) != NULL){
+        printf("Changing mem_plus_swap_limit to: %s\n", pointer+21);
+        options.mem_plus_swap_limit = pointer+21;
+      }
+      if((pointer = strstr(token, "pid_limit:")) != NULL){
+        printf("Changing pid_limit to: %s\n", pointer+11);
+        options.pid_limit = pointer+11;
+      }
+      if((pointer = strstr(token, "CPU%:")) != NULL){
+        printf("Changing CPU Percentage: %s\n", pointer+6);
+        int new_quota = atoi(pointer+6)*10000;
+        if(new_quota < 0){
+          printf("Cannot change CPU usage to negative amount...and why would you?\n");
+          return EXIT_FAILURE;}
+          if(new_quota > 1000000){
+            printf("Cannot change CPU usage over 100%%...nice try though\n");
+            return EXIT_FAILURE;
+          }
+          char quota[10];
+          sprintf(quota, "%d", new_quota);
+
+          options.cpu_quota = quota;
+        }
+        token = strtok(NULL, "\n");
+      }
     }
     // Determines what new namespaces we will create for our containerized process.
     // Note, NEWIPC is going to be set from within that process since we need to synchronize over cgroups_done.
