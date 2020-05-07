@@ -386,8 +386,10 @@ int main(int argc, char** argv) {
           printf("Cannot change CPU usage over 100%%...nice try though\n");
           return EXIT_FAILURE;
         }
-        char quota = (char) new_quota;
-        options.cpu_quota = &quota;
+		char quota[10];
+		sprintf(quota, "%d", new_quota);
+
+        options.cpu_quota = quota;
       }
 	token = strtok(NULL, "\n");
 	}
