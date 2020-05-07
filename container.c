@@ -365,18 +365,22 @@ int main(int argc, char** argv) {
 	token = strtok(buff, "\n");
 	while(token != NULL){
     if((pointer = strstr(token, "mem_limit:")) != NULL){
+      if(strlen(pointer) < 12){printf("No mem_limit value specified!\n"); return EXIT_FAILURE;}
       printf("Changing mem_limit to:%s\n", pointer+11);
       options.mem_limit = pointer+11;
     }
     if((pointer = strstr(token, "mem_plus_swap_limit:")) != NULL){
+	  if(strlen(pointer) < 22){printf("No mem_plus_swap_limit value specified!\n"); return EXIT_FAILURE;}
       printf("Changing mem_plus_swap_limit to:%s\n", pointer+21);
       options.mem_plus_swap_limit = pointer+21;
     }
     if((pointer = strstr(token, "pid_limit:")) != NULL){
+	  if(strlen(pointer) < 12){printf("No pid_value value specified!\n"); return EXIT_FAILURE;}
       printf("Changing pid_limit to:%s\n", pointer+11);
       options.pid_limit = pointer+11;
     }
     if((pointer = strstr(token, "CPU%:")) != NULL){
+	  if(strlen(pointer) < 7){printf("No CPU%% value specified!\n"); return EXIT_FAILURE;}
       printf("Changing CPU%%:%s\n", pointer+6);
       int new_quota = atoi(pointer+6)*10000;
       if(new_quota < 0){
