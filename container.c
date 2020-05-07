@@ -377,7 +377,7 @@ int main(int argc, char** argv) {
       options.pid_limit = pointer+11;
     }
     if((pointer = strstr(token, "CPU%:")) != NULL){
-      printf("Changing CPU:%s\n", pointer+6);
+      printf("Changing CPU%%:%s\n", pointer+6);
       int new_quota = atoi(pointer+6)*10000;
       if(new_quota < 0){
         printf("Cannot change CPU usage to negative amount...and why would you?\n");
